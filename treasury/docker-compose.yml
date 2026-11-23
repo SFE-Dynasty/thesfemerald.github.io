@@ -43,26 +43,18 @@ services:
     environment:
       FINERACT_DEFAULT_TENANTDB_PWD: ${TRUST_DB_PASS}
 
-  tooljet:
-    image: tooljet/tooljet-ce:latest
+  fiduciary-portal:
+    image: python:3.12-alpine
     restart: unless-stopped
-    depends_on:
-      - postgres
-      - redis
+    working_dir: /app
+    volumes:
+      - ./orchestrator:/app
+      - ./exports:/app/exports
     ports:
-      - "127.0.0.1:8082:80"
-    environment:
-      TOOLJET_HOST: ${TOOLJET_HOST:-http://localhost:8082}
-      PG_HOST: postgres
-      PG_PORT: 5432
-      PG_USER: ${TRUST_DB_USER:-fiduciary_admin}
-      PG_PASS: ${TRUST_DB_PASS}
-      PG_DB: tooljet_production
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      SECRET_KEY_BASE: ${TOOLJET_SECRET_KEY}
-      LOCKBOX_MASTER_KEY: ${TOOLJET_LOCKBOX_KEY}
-    command: npm run start:prod
+      - "127.0.0.1:8082:8082"
+    env_file:
+      - .env
+    command: sh -c "pip install -q fastapi uvicorn requests && uvicorn portal:app --host 0.0.0.0 --port 8082"
 
   cloudflared:
     image: cloudflare/cloudflared:latest
