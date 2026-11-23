@@ -1,0 +1,73 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${TRUST_DB_USER:-fiduciary_admin}
+      POSTGRES_PASSWORD: ${TRUST_DB_PASS}
+      POSTGRES_DB: treasury_core
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  blnk:
+    image: jerryenebeli/blnk:latest
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "127.0.0.1:5001:5001"
+    environment:
+      BLNK_DATA_SOURCE_DNS: postgres://${TRUST_DB_USER:-fiduciary_admin}:${TRUST_DB_PASS}@postgres:5432/treasury_core?sslmode=disable
+      BLNK_REDIS_DNS: redis:6379
+
+  moov-ach:
+    image: moov/ach:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./exports/nacha:/ach/files
+
+  fineract:
+    image: apache/fineract:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8443:8443"
+    environment:
+      FINERACT_DEFAULT_TENANTDB_PWD: ${TRUST_DB_PASS}
+
+  tooljet:
+    image: tooljet/tooljet-ce:latest
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "127.0.0.1:8082:80"
+    environment:
+      TOOLJET_HOST: ${TOOLJET_HOST:-http://localhost:8082}
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_USER: ${TRUST_DB_USER:-fiduciary_admin}
+      PG_PASS: ${TRUST_DB_PASS}
+      PG_DB: tooljet_production
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SECRET_KEY_BASE: ${TOOLJET_SECRET_KEY}
+      LOCKBOX_MASTER_KEY: ${TOOLJET_LOCKBOX_KEY}
+    command: npm run start:prod
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+
+volumes:
+  postgres_data:
